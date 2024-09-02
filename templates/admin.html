@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Synchronized Video Player</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        .video-container {
+            position: relative;
+            width: 640px;
+        }
+        .custom-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .custom-controls button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .custom-controls input[type="range"] {
+            width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Admin Control Panel</h1>
+    <div class="video-container">
+        <video id="videoPlayer" width="640" height="360" controls>
+            <source src="{{ video_state['video'] }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <div class="custom-controls">
+            <button id="muteButton">🔊</button>
+            <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1">
+        </div>
+    </div>
+    <br>
+    <button id="syncButton">Sync All Clients</button>
+
+    <script>
+        const socket = io();
+        const videoPlayer = document.getElementById('videoPlayer');
+        const syncButton = document.getElementById('syncButton');
+        const muteButton = document.getElementById('muteButton');
+        const volumeSlider = document.getElementById('volumeSlider');
+
+        socket.on('connect', () => {
+            console.log('Admin connected to server');
+            socket.emit('admin_connected');
+        });
+
+        videoPlayer.addEventListener('play', () => {
+            socket.emit('admin_update_video_state', { playing: true, currentTime: videoPlayer.currentTime });
+        });
+
+        videoPlayer.addEventListener('pause', () => {
+            socket.emit('admin_update_video_state', { playing: false, currentTime: videoPlayer.currentTime });
+        });
+
+        videoPlayer.addEventListener('seeked', () => {
+            socket.emit('admin_update_video_state', { currentTime: videoPlayer.currentTime });
+        });
+
+        syncButton.addEventListener('click', () => {
+            socket.emit('admin_update_video_state', { 
+                playing: !videoPlayer.paused, 
+                currentTime: videoPlayer.currentTime 
+            });
+        });
+
+        muteButton.addEventListener('click', () => {
+            videoPlayer.muted = !videoPlayer.muted;
+            muteButton.textContent = videoPlayer.muted ? '🔇' : '🔊';
+        });
+
+        volumeSlider.addEventListener('input', () => {
+            videoPlayer.volume = volumeSlider.value;
+            videoPlayer.muted = false;
+            muteButton.textContent = '🔊';
+        });
+
+        socket.on('video_state_updated', (state) => {
+            if (Math.abs(videoPlayer.currentTime - state.currentTime) > 0.5) {
+                videoPlayer.currentTime = state.currentTime;
+            }
+            if (state.playing && videoPlayer.paused) {
+                videoPlayer.play();
+            } else if (!state.playing && !videoPlayer.paused) {
+                videoPlayer.pause();
+            }
+        });
+
+        socket.on('admin_authenticated', () => {
+            console.log('Admin authenticated');
+        });
+
+        socket.on('admin_unauthorized', () => {
+            console.log('Admin unauthorized');
+            window.location.href = '/admin_login';
+        });
+    </script>
+</body>
+</html>
